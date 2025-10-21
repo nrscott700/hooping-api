@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from espn_api.basketball import League
 import os
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()   # reads .env file if present
