@@ -101,3 +101,35 @@ def changes():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
         "changes": changes or "No roster changes since last check."
     }
+import json, time, requests
+
+last_snapshot = {}
+
+@app.get("/changes")
+def changes():
+    """Check for adds/drops and post to Discord if any changes are found."""
+    global last_snapshot
+    webhook = os.getenv("DISCORD_WEBHOOK_URL")
+    current = {t.team_name: [p.name for p in t.roster] for t in league.teams}
+    changes = {}
+
+    # Compare rosters
+    if last_snapshot:
+        for team, players in current.items():
+            old_players = last_snapshot.get(team, [])
+            added = list(set(players) - set(old_players))
+            removed = list(set(old_players) - set(players))
+            if added or removed:
+                changes[team] = {"added": added, "removed": removed}
+
+                # Send to Discord
+                if webhook:
+                    msg = f"🏀 **{team}** roster changes:\n"
+                    if added:
+                        msg += f"➕ Added: {', '.join(added)}\n"
+                    if removed:
+                        msg += f"➖ Dropped: {', '.join(removed)}"
+                    requests.post(webhook, json={"content": msg})
+
+    last_snapshot = current
+    return {"timestamp": time.time(), "changes": changes}
