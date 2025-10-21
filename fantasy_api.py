@@ -5,7 +5,29 @@ from dotenv import load_dotenv
 
 load_dotenv()   # reads .env file if present
 
-app = FastAPI(title="ESPN Fantasy Basketball API")
+from fastapi.openapi.utils import get_openapi
+
+app = FastAPI(
+    title="ESPN Fantasy Basketball API",
+    description="API for accessing ESPN fantasy basketball league data.",
+    version="1.0.0"
+)
+
+# Custom OpenAPI schema to include 'servers' for ChatGPT Actions
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["servers"] = [{"url": "https://hooping-api.onrender.com"}]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # Load cookies from environment variables
 LEAGUE_ID = 1035166756
