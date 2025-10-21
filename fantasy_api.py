@@ -129,7 +129,6 @@ def changes():
     last_snapshot = current
     return {"timestamp": time.time(), "changes": changes}
 
-from datetime import datetime, timedelta
 
 from datetime import datetime, timedelta
 
