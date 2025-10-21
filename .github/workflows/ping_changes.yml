@@ -1,0 +1,13 @@
+name: Ping /changes endpoint hourly
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour
+  workflow_dispatch:     # Allow manual run from GitHub
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Render API
+        run: curl -X GET https://hooping-api.onrender.com/changes
