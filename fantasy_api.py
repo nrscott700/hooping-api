@@ -128,6 +128,7 @@ def changes():
 
     last_snapshot = current
     return {"timestamp": time.time(), "changes": changes}
+
 @app.get("/rosters_detailed")
 def rosters_detailed():
     """
@@ -143,9 +144,21 @@ def rosters_detailed():
         team_total = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
 
         for player in team.roster:
+            # Get all relevant stat dictionaries safely
             avg_stats = player.stats.get("avg", {})
             total_stats = player.stats.get("total", {})
-            proj_stats = player.stats.get("projected_total", {})
+
+            # ESPN projection handling (your version stores projections under YEAR_projected)
+            proj_stats = (
+                player.stats.get(f"{YEAR}_projected", {}).get("total", {})
+                or player.stats.get("projected_total", {})
+                or {}
+            )
+            proj_avg = (
+                player.stats.get(f"{YEAR}_projected", {}).get("avg", {})
+                or player.stats.get("projected_avg", {})
+                or {}
+            )
 
             # Player-level info
             player_info = {
@@ -156,7 +169,6 @@ def rosters_detailed():
                 "injury_detail": getattr(player, "injuryStatusDetail", None),
                 "lineup_slot": getattr(player, "lineupSlot", None),
                 "acquisition_type": getattr(player, "acquisitionType", None),
-               
 
                 # Season averages
                 "avg_points": avg_stats.get("PTS"),
@@ -186,8 +198,8 @@ def rosters_detailed():
                 "projected_blocks": proj_stats.get("BLK"),
                 "projected_steals": proj_stats.get("STL"),
                 "projected_fantasy_points": proj_stats.get("FPTS"),
-
-            
+                "projected_avg_points": proj_avg.get("PTS"),
+                "projected_avg_fantasy_points": proj_avg.get("FPTS"),
             }
 
             roster_data.append(player_info)
