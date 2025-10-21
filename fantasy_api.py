@@ -133,3 +133,12 @@ def changes():
 
     last_snapshot = current
     return {"timestamp": time.time(), "changes": changes}
+
+@app.get("/test_webhook")
+def test_webhook():
+    webhook = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook:
+        return {"error": "Webhook not configured."}
+    msg = "🏀 Test alert: your fantasy API is connected to Discord successfully!"
+    r = requests.post(webhook, json={"content": msg})
+    return {"status": r.status_code, "message": "Sent test message."}
