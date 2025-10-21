@@ -102,33 +102,6 @@ last_snapshot = {}
 
 @app.get("/changes")
 def changes():
-    """
-    Compare current rosters to the last snapshot and report any adds or cuts.
-    """
-    global last_snapshot
-    current = {t.team_name: [p.name for p in t.roster] for t in league.teams}
-    changes = {}
-
-    if last_snapshot:
-        for team, players in current.items():
-            old_players = last_snapshot.get(team, [])
-            added = list(set(players) - set(old_players))
-            removed = list(set(old_players) - set(players))
-            if added or removed:
-                changes[team] = {"added": added, "removed": removed}
-
-    # Update snapshot
-    last_snapshot = current
-    return {
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-        "changes": changes or "No roster changes since last check."
-    }
-import json, time, requests
-
-last_snapshot = {}
-
-@app.get("/changes")
-def changes():
     """Check for adds/drops and post to Discord if any changes are found."""
     global last_snapshot
     webhook = os.getenv("DISCORD_WEBHOOK_URL")
@@ -155,3 +128,85 @@ def changes():
 
     last_snapshot = current
     return {"timestamp": time.time(), "changes": changes}
+@app.get("/rosters_detailed")
+def rosters_detailed():
+    """
+    Return player-level and team-level fantasy data.
+    Includes averages, totals, projections, and metadata.
+    Excludes live game stats.
+    """
+    result = []
+
+    for team in league.teams:
+        roster_data = []
+        team_projected = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+        team_total = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+
+        for player in team.roster:
+            avg_stats = player.stats.get("avg", {})
+            total_stats = player.stats.get("total", {})
+            proj_stats = player.stats.get("projected_total", {})
+
+            # Player-level info
+            player_info = {
+                "name": player.name,
+                "position": player.position,
+                "pro_team": player.proTeam,
+                "injury_status": player.injuryStatus,
+                "injury_detail": getattr(player, "injuryStatusDetail", None),
+                "eligible_positions": getattr(player, "eligibleSlots", []),
+                "lineup_slot": getattr(player, "lineupSlot", None),
+                "acquisition_type": getattr(player, "acquisitionType", None),
+                "percent_owned": getattr(player, "percentOwned", None),
+                "percent_started": getattr(player, "percentStarted", None),
+
+                # Season averages
+                "avg_points": avg_stats.get("PTS"),
+                "avg_rebounds": avg_stats.get("REB"),
+                "avg_assists": avg_stats.get("AST"),
+                "avg_blocks": avg_stats.get("BLK"),
+                "avg_steals": avg_stats.get("STL"),
+                "avg_fantasy_points": avg_stats.get("FPTS"),
+                "avg_minutes": avg_stats.get("MIN"),
+                "avg_fg_pct": avg_stats.get("FG%"),
+                "avg_ft_pct": avg_stats.get("FT%"),
+                "avg_3pm": avg_stats.get("3PM"),
+                "avg_turnovers": avg_stats.get("TO"),
+
+                # Season totals
+                "total_points": total_stats.get("PTS"),
+                "total_rebounds": total_stats.get("REB"),
+                "total_assists": total_stats.get("AST"),
+                "total_blocks": total_stats.get("BLK"),
+                "total_steals": total_stats.get("STL"),
+                "total_fantasy_points": total_stats.get("FPTS"),
+                "games_played": total_stats.get("GP"),
+
+                # Projections (for rest of matchup week)
+                "projected_points": proj_stats.get("PTS"),
+                "projected_rebounds": proj_stats.get("REB"),
+                "projected_assists": proj_stats.get("AST"),
+                "projected_blocks": proj_stats.get("BLK"),
+                "projected_steals": proj_stats.get("STL"),
+                "projected_fantasy_points": proj_stats.get("FPTS"),
+
+                # Advanced
+                "double_doubles": avg_stats.get("DD"),
+                "triple_doubles": avg_stats.get("TD"),
+            }
+
+            roster_data.append(player_info)
+
+            # Aggregate team totals
+            for k in team_projected.keys():
+                team_projected[k] += proj_stats.get(k, 0) or 0
+                team_total[k] += total_stats.get(k, 0) or 0
+
+        result.append({
+            "team": team.team_name,
+            "season_totals": team_total,
+            "projected_week_totals": team_projected,
+            "roster": roster_data
+        })
+
+    return result
