@@ -154,11 +154,9 @@ def rosters_detailed():
                 "pro_team": player.proTeam,
                 "injury_status": player.injuryStatus,
                 "injury_detail": getattr(player, "injuryStatusDetail", None),
-                "eligible_positions": getattr(player, "eligibleSlots", []),
                 "lineup_slot": getattr(player, "lineupSlot", None),
                 "acquisition_type": getattr(player, "acquisitionType", None),
-                "percent_owned": getattr(player, "percentOwned", None),
-                "percent_started": getattr(player, "percentStarted", None),
+               
 
                 # Season averages
                 "avg_points": avg_stats.get("PTS"),
@@ -167,7 +165,6 @@ def rosters_detailed():
                 "avg_blocks": avg_stats.get("BLK"),
                 "avg_steals": avg_stats.get("STL"),
                 "avg_fantasy_points": avg_stats.get("FPTS"),
-                "avg_minutes": avg_stats.get("MIN"),
                 "avg_fg_pct": avg_stats.get("FG%"),
                 "avg_ft_pct": avg_stats.get("FT%"),
                 "avg_3pm": avg_stats.get("3PM"),
@@ -190,9 +187,7 @@ def rosters_detailed():
                 "projected_steals": proj_stats.get("STL"),
                 "projected_fantasy_points": proj_stats.get("FPTS"),
 
-                # Advanced
-                "double_doubles": avg_stats.get("DD"),
-                "triple_doubles": avg_stats.get("TD"),
+            
             }
 
             roster_data.append(player_info)
