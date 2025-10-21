@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Fantasy Analyst",
+  "name_for_model": "fantasyAnalyst",
+  "description_for_human": "Get live insights from Nate’s ESPN Fantasy Basketball league.",
+  "description_for_model": "Provides fantasy basketball team data, rosters, transactions, and roster changes from a live ESPN API.",
+  "api": {
+    "type": "openapi",
+    "url": "https://hooping-api.onrender.com/openapi.json",
+    "has_user_authentication": false
+  },
+  "auth": {
+    "type": "none"
+  },
+  "contact_email": "nrscott700@gmail.com",
+  "legal_info_url": "https://hooping-api.onrender.com"
+}
