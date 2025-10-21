@@ -148,7 +148,7 @@ def rosters_detailed():
             avg_stats = player.stats.get("avg", {})
             total_stats = player.stats.get("total", {})
 
-            # ESPN projection handling (your version stores projections under YEAR_projected)
+            # ESPN projection handling (your version uses YEAR_projected)
             proj_stats = (
                 player.stats.get(f"{YEAR}_projected", {}).get("total", {})
                 or player.stats.get("projected_total", {})
@@ -158,6 +158,15 @@ def rosters_detailed():
                 player.stats.get(f"{YEAR}_projected", {}).get("avg", {})
                 or player.stats.get("projected_avg", {})
                 or {}
+            )
+
+            # Handle "flat" projection formats (from appliedTotal / appliedAverage)
+            projected_total_points = getattr(player, "projected_total_points", None)
+            projected_avg_points = getattr(player, "projected_avg_points", None)
+
+            # Estimate weekly projections based on 82-game season
+            projected_weekly_points = (
+                projected_total_points / 82 if projected_total_points else None
             )
 
             # Player-level info
@@ -191,15 +200,11 @@ def rosters_detailed():
                 "total_fantasy_points": total_stats.get("FPTS"),
                 "games_played": total_stats.get("GP"),
 
-                # Projections (for rest of matchup week)
+                # Projections (flat + normalized)
                 "projected_points": proj_stats.get("PTS"),
-                "projected_rebounds": proj_stats.get("REB"),
-                "projected_assists": proj_stats.get("AST"),
-                "projected_blocks": proj_stats.get("BLK"),
-                "projected_steals": proj_stats.get("STL"),
-                "projected_fantasy_points": proj_stats.get("FPTS"),
-                "projected_avg_points": proj_avg.get("PTS"),
-                "projected_avg_fantasy_points": proj_avg.get("FPTS"),
+                "projected_fantasy_points": proj_stats.get("FPTS") or projected_total_points,
+                "projected_avg_fantasy_points": proj_avg.get("FPTS") or projected_avg_points,
+                "projected_weekly_fantasy_points": projected_weekly_points,
             }
 
             roster_data.append(player_info)
