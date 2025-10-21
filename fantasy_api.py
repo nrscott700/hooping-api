@@ -129,25 +129,33 @@ def changes():
     last_snapshot = current
     return {"timestamp": time.time(), "changes": changes}
 
+from datetime import datetime, timedelta
+
 @app.get("/rosters_detailed")
 def rosters_detailed():
     """
     Return player-level and team-level fantasy data.
-    Includes averages, totals, projections (normalized for weekly values),
-    and metadata. Excludes live game stats.
+    Includes averages, totals, projections, weekly normalization,
+    and dynamic game count for the current week.
     """
     result = []
+
+    # Determine current week range (Monday–Sunday)
+    today = datetime.today()
+    start_of_week = today - timedelta(days=today.weekday())  # Monday
+    end_of_week = start_of_week + timedelta(days=6)          # Sunday
 
     for team in league.teams:
         roster_data = []
         team_projected_total = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
         team_season_total = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+        team_projected_weekly = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
 
         for player in team.roster:
             avg_stats = player.stats.get("avg", {})
             total_stats = player.stats.get("total", {})
 
-            # ESPN projection logic (handle both modern + legacy)
+            # Handle ESPN projections (flat + nested)
             proj_stats = (
                 player.stats.get(f"{YEAR}_projected", {}).get("total", {})
                 or player.stats.get("projected_total", {})
@@ -159,16 +167,24 @@ def rosters_detailed():
                 or {}
             )
 
-            # Fallback flat projection values
+            # Fallback flat values
             projected_total_points = getattr(player, "projected_total_points", None)
             projected_avg_points = getattr(player, "projected_avg_points", None)
 
-            # Normalize projections by 82-game season
-            projected_weekly_fantasy_points = (
-                projected_total_points / 82 if projected_total_points else None
+            # Count how many games this player has this week
+            games_this_week = sum(
+                1 for g in getattr(player, "schedule", {}).values()
+                if g.get("date") and start_of_week <= g["date"] <= end_of_week
             )
 
-            # Player-level info
+            # Normalize projections by 82 games × number of games this week
+            projected_weekly_fantasy_points = (
+                (projected_total_points / 82) * games_this_week
+                if projected_total_points and games_this_week
+                else None
+            )
+
+            # Player-level dictionary
             player_info = {
                 "name": player.name,
                 "position": player.position,
@@ -207,6 +223,7 @@ def rosters_detailed():
                 "projected_steals": proj_stats.get("STL"),
                 "projected_fantasy_points": proj_stats.get("FPTS") or projected_total_points,
                 "projected_avg_fantasy_points": proj_avg.get("FPTS") or projected_avg_points,
+                "games_this_week": games_this_week,
                 "projected_weekly_fantasy_points": projected_weekly_fantasy_points,
             }
 
@@ -214,11 +231,12 @@ def rosters_detailed():
 
             # Aggregate team totals
             for k in team_projected_total.keys():
-                team_projected_total[k] += (proj_stats.get(k, 0) or 0)
-                team_season_total[k] += (total_stats.get(k, 0) or 0)
+                team_projected_total[k] += proj_stats.get(k, 0) or 0
+                team_season_total[k] += total_stats.get(k, 0) or 0
+            team_projected_weekly["FPTS"] += projected_weekly_fantasy_points or 0
 
-        # Normalize team projection totals by 82
-        team_projected_weekly = {
+        # Normalize team projections by 82 games for comparison
+        projected_weekly_team_norm = {
             k: (v / 82 if v else 0) for k, v in team_projected_total.items()
         }
 
@@ -226,7 +244,7 @@ def rosters_detailed():
             "team": team.team_name,
             "season_totals": team_season_total,
             "projected_season_totals": team_projected_total,
-            "projected_weekly_totals": team_projected_weekly,
+            "projected_weekly_totals": projected_weekly_team_norm,
             "roster": roster_data
         })
 
