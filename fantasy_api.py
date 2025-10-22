@@ -290,3 +290,77 @@ def rosters_detailed():
         })
 
     return result
+
+@app.get("/rosters_summary")
+def rosters_summary():
+    """
+    Lightweight summary of team performance and projections.
+    Aggregates totals from the same ESPN data used in /rosters_detailed.
+    Ideal for dashboards or odds modeling.
+    """
+    from datetime import datetime, timedelta
+
+    today = datetime.today()
+    start_of_week = today - timedelta(days=today.weekday())   # Monday
+    end_of_week   = start_of_week + timedelta(days=6)          # Sunday
+
+    summary = []
+
+    for team in league.teams:
+        team_totals = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+        team_weekly = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+
+        for player in team.roster:
+            # --- Season totals ---
+            total_stats = player.stats.get("total", {})
+            for k in team_totals.keys():
+                team_totals[k] += total_stats.get(k, 0) or 0
+
+            # --- Projections ---
+            proj_total = (
+                player.stats.get(f"{YEAR}_projected", {}).get("total", {})
+                or player.stats.get("projected_total", {})
+                or {}
+            )
+            proj_avg = (
+                player.stats.get(f"{YEAR}_projected", {}).get("avg", {})
+                or player.stats.get("projected_avg", {})
+                or {}
+            )
+
+            projected_total_points = getattr(player, "projected_total_points", None)
+            projected_avg_points   = getattr(player, "projected_avg_points",   None)
+
+            # Count how many games the player has this week
+            games_this_week = sum(
+                1 for g in getattr(player, "schedule", {}).values()
+                if g.get("date") and start_of_week <= g["date"] <= end_of_week
+            )
+
+            # Estimate per-game projections
+            if projected_avg_points:
+                per_game_fp = projected_avg_points
+            elif projected_total_points and projected_total_points > 0:
+                per_game_fp = projected_total_points / 82
+            else:
+                per_game_fp = 0
+
+            projected_weekly_fantasy_points = per_game_fp * games_this_week
+
+            # Aggregate projected categories (use avg × games)
+            for stat in ["PTS", "REB", "AST", "BLK", "STL"]:
+                per_game_val = proj_avg.get(stat, 0) or 0
+                team_weekly[stat] += per_game_val * games_this_week
+
+            team_weekly["FPTS"] += projected_weekly_fantasy_points
+
+        summary.append({
+            "team": team.team_name,
+            "season_totals": {k: round(v, 2) for k, v in team_totals.items()},
+            "projected_weekly_totals": {k: round(v, 2) for k, v in team_weekly.items()},
+        })
+
+    # Sort by projected weekly fantasy points (descending)
+    summary.sort(key=lambda x: x["projected_weekly_totals"]["FPTS"], reverse=True)
+
+    return summary
