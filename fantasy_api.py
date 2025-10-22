@@ -189,6 +189,7 @@ def rosters_detailed():
     """
     Player + team details with correct weekly projections and
     fantasy points calculated using custom scoring weights.
+    Includes FG%, FT%, 3PM, TO, and fantasy points per game.
     """
     result = []
     today = datetime.today()
@@ -204,6 +205,7 @@ def rosters_detailed():
             avg_stats   = player.stats.get("avg", {})
             total_stats = player.stats.get("total", {})
 
+            # ESPN projections (nested or legacy)
             proj_total = (
                 player.stats.get(f"{YEAR}_projected", {}).get("total", {})
                 or player.stats.get("projected_total", {})
@@ -215,36 +217,59 @@ def rosters_detailed():
                 or {}
             )
 
+            # Count games this week
             games_this_week = sum(
                 1 for g in getattr(player, "schedule", {}).values()
                 if g.get("date") and start_of_week <= g["date"] <= end_of_week
             )
 
-            # ✅ Calculate fantasy points using custom weights
+            # Custom fantasy scoring
             fantasy_points_total = calculate_fantasy_points(total_stats)
             fantasy_points_projected = calculate_fantasy_points(proj_total)
 
+            # Fantasy points per game (avoid division by zero)
+            gp = total_stats.get("GP", 0)
+            fantasy_points_per_game = round(fantasy_points_total / gp, 2) if gp > 0 else 0
+
+            # Player payload
             player_info = {
                 "name": player.name,
                 "position": player.position,
                 "pro_team": player.proTeam,
                 "injury_status": player.injuryStatus,
                 "games_this_week": games_this_week,
+
+                # Fantasy stats
                 "fantasy_points_total_calc": fantasy_points_total,
+                "fantasy_points_per_game": fantasy_points_per_game,
                 "fantasy_points_projected_calc": fantasy_points_projected,
+
+                # Averages (core + shooting + turnovers)
                 "avg_points": avg_stats.get("PTS"),
                 "avg_rebounds": avg_stats.get("REB"),
                 "avg_assists": avg_stats.get("AST"),
                 "avg_blocks": avg_stats.get("BLK"),
                 "avg_steals": avg_stats.get("STL"),
+                "avg_turnovers": avg_stats.get("TO"),
+                "avg_fg_pct": avg_stats.get("FG%"),
+                "avg_ft_pct": avg_stats.get("FT%"),
+                "avg_3pm": avg_stats.get("3PM"),
+
+                # Season totals
+                "total_points": total_stats.get("PTS"),
+                "total_rebounds": total_stats.get("REB"),
+                "total_assists": total_stats.get("AST"),
+                "total_blocks": total_stats.get("BLK"),
+                "total_steals": total_stats.get("STL"),
+                "total_turnovers": total_stats.get("TO"),
+                "games_played": gp,
             }
 
             roster_data.append(player_info)
 
-            # Team totals
+            # --- Team rollups ---
             team_season_total["FPTS"] += fantasy_points_total
             team_projected_weekly["FPTS"] += fantasy_points_projected
-
             for stat in ["PTS", "REB", "AST", "BLK", "STL"]:
                 team_season_total[stat] += total_stats.get(stat, 0) or 0
                 team_projected_weekly[stat] += proj_total.get(stat, 0) or 0
@@ -258,43 +283,72 @@ def rosters_detailed():
 
     return result
 
+
 @app.get("/rosters_summary")
 def rosters_summary():
     """
     Lightweight summary of team performance and projections.
-    Uses the same fantasy scoring weights as rosters_detailed.
+    Includes turnovers, 3PM, and shooting metrics.
+    Uses custom fantasy scoring weights for FPTS.
     """
     today = datetime.today()
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week   = start_of_week + timedelta(days=6)
+    start_of_week = today - timedelta(days=today.weekday())   # Monday
+    end_of_week   = start_of_week + timedelta(days=6)          # Sunday
 
     summary = []
 
     for team in league.teams:
-        team_totals = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
-        team_projected_weekly = {"PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0, "FPTS": 0}
+        # Expanded team stat categories
+        team_totals = {
+            "PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0,
+            "3PM": 0, "TO": 0, "FPTS": 0
+        }
+        team_projected_weekly = {
+            "PTS": 0, "REB": 0, "AST": 0, "BLK": 0, "STL": 0,
+            "3PM": 0, "TO": 0, "FPTS": 0
+        }
+
+        fg_pct_values, ft_pct_values = [], []
 
         for player in team.roster:
+            # --- Season totals ---
             total_stats = player.stats.get("total", {})
+            fg_pct = player.stats.get("avg", {}).get("FG%")
+            ft_pct = player.stats.get("avg", {}).get("FT%")
+
+            if fg_pct is not None:
+                fg_pct_values.append(fg_pct)
+            if ft_pct is not None:
+                ft_pct_values.append(ft_pct)
+
+            # --- Projections ---
             proj_total = (
                 player.stats.get(f"{YEAR}_projected", {}).get("total", {})
                 or player.stats.get("projected_total", {})
                 or {}
             )
 
-            # ✅ Apply your custom scoring system
+            # Apply your custom fantasy scoring
             team_totals["FPTS"] += calculate_fantasy_points(total_stats)
             team_projected_weekly["FPTS"] += calculate_fantasy_points(proj_total)
 
-            for stat in ["PTS", "REB", "AST", "BLK", "STL"]:
+            # Core stats aggregation
+            for stat in ["PTS", "REB", "AST", "BLK", "STL", "3PM", "TO"]:
                 team_totals[stat] += total_stats.get(stat, 0) or 0
                 team_projected_weekly[stat] += proj_total.get(stat, 0) or 0
+
+        # Compute average FG% and FT% across players
+        avg_fg_pct = round(sum(fg_pct_values) / len(fg_pct_values), 3) if fg_pct_values else None
+        avg_ft_pct = round(sum(ft_pct_values) / len(ft_pct_values), 3) if ft_pct_values else None
 
         summary.append({
             "team": team.team_name,
             "season_totals": {k: round(v, 2) for k, v in team_totals.items()},
             "projected_weekly_totals": {k: round(v, 2) for k, v in team_projected_weekly.items()},
+            "avg_fg_pct": avg_fg_pct,
+            "avg_ft_pct": avg_ft_pct
         })
 
+    # Sort by projected weekly fantasy points
     summary.sort(key=lambda x: x["projected_weekly_totals"]["FPTS"], reverse=True)
     return summary
